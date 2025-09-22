@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <list>
 #include <memory>
 #include <shared_mutex>
@@ -72,14 +73,22 @@ class FrameHeader {
   /** @brief The frame ID / index of the frame this header represents. */
   const frame_id_t frame_id_;
 
+  // Added by zhangyu at 2025/9/19
+  //  这个帧中存放的page的id
+  page_id_t page_id_;
+
   /** @brief The readers / writer latch for this frame. */
   std::shared_mutex rwlatch_;
+
+  // added by zhangyu at 2025/9/25
+  /** 用来给pincout和set操作加锁 */
+  std::mutex latch_;
 
   /** @brief The number of pins on this frame keeping the page in memory. */
   std::atomic<size_t> pin_count_;
 
   /** @brief The dirty flag. */
-  bool is_dirty_;
+  std::atomic<bool> is_dirty_;
 
   /**
    * @brief A pointer to the data of the page that this frame holds.

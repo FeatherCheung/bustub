@@ -35,6 +35,25 @@ class LRUKNode {
   [[maybe_unused]] size_t k_;
   [[maybe_unused]] frame_id_t fid_;
   [[maybe_unused]] bool is_evictable_{false};
+  // begin: added by zhangyu at 2025/9/14
+ public:
+  auto Gethistory() -> std::list<size_t>;
+
+  auto GetKvalue() -> size_t;
+
+  auto Getframeid() -> frame_id_t;
+
+  auto Isevictable() -> bool;
+
+  void Sethistory(size_t current_timestamp_);
+
+  void SetKvalue(size_t K);
+
+  void Setframeid(frame_id_t frame_id);
+
+  void Setisevictable(bool evictable);
+
+  // end: added by zhangyu at 2025/9/14
 };
 
 /**
@@ -153,7 +172,7 @@ class LRUKReplacer {
   // Remove maybe_unused if you start using them.
   [[maybe_unused]] std::unordered_map<frame_id_t, LRUKNode> node_store_;
   [[maybe_unused]] size_t current_timestamp_{0};
-  [[maybe_unused]] size_t curr_size_{0};
+  [[maybe_unused]] std::atomic<size_t> curr_size_{0};
   [[maybe_unused]] size_t replacer_size_;
   [[maybe_unused]] size_t k_;
   [[maybe_unused]] std::mutex latch_;
