@@ -11,6 +11,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <deque>
 #include <filesystem>
 #include <iostream>
@@ -69,7 +70,31 @@ class BPlusTree {
                      const KeyComparator &comparator, int leaf_max_size = LEAF_PAGE_SLOT_CNT,
                      int internal_max_size = INTERNAL_PAGE_SLOT_CNT);
 
-  // Returns true if this B+ tree has no keys and values.
+  // begin added by zhangyu at 2025/9/28 for P2:Task2
+  //  helper
+  auto InternalBinarySearch(const InternalPage *internal_page, const KeyType &key) -> int;
+  auto LeafBinarySearch(const LeafPage *leaf_page, const KeyType &key) -> int;
+  auto Split(Context &ctx, LeafPage *current_page, page_id_t current_pid, const KeyType &key, const ValueType &value,
+             size_t key_index) -> bool;
+  void RedistributionLeaf(LeafPage *current_page, LeafPage *sibling_page, InternalPage *parent_page, bool isright,
+                          int current_index, int sibling_index);
+  void RedistributionInternal(InternalPage *current_page, InternalPage *sibling_page, InternalPage *parent_page,
+                              bool isright, int current_index, int sibling_index);
+
+  auto MergeLeaf(LeafPage *left_page, LeafPage *right_page, int left_index, int right_index, InternalPage *parent_page)
+      -> InternalPage *;
+  auto MergeInternal(InternalPage *left_page, InternalPage *right_page, int current_index, int sibling_index,
+                     InternalPage *parent_page, bool isright) -> InternalPage *;
+
+  using CurrentNode = struct CurrentNode {
+    union CurrentPage {
+      LeafPage *leaf_page_;
+      InternalPage *internal_page_;
+    } page_;
+    bool is_leaf_page_;
+  };
+  // end added by zhangyu at 2025/9/28 for P2:Task2
+  //  Returns true if this B+ tree has no keys and values.
   auto IsEmpty() const -> bool;
 
   // Insert a key-value pair into this B+ tree.
@@ -149,6 +174,8 @@ class BPlusTree {
   int leaf_max_size_;
   int internal_max_size_;
   page_id_t header_page_id_;
+  // added by zhangyu at 2025/10/14 for P2:Task3
+  std::atomic<page_id_t> leftmost_leaf_page_id_;
 };
 
 /**
