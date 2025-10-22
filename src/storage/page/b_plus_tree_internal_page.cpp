@@ -119,6 +119,20 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Delete(int index) -> bool {
   ChangeSizeBy(-1);
   return true;
 }
+// end: added by zhangyu at 2025/9/28 for P2:Task1
+
+// begin: added by zhangyu at 2025/10/19 for P2:Task4
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::IsSafeInternalForDelete(int deletenum) -> bool {
+  auto minsize = GetMinSize() + 1;
+  return GetSize() - deletenum >= minsize;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::IsSafeInternalForInsert(int insertnum) -> bool {
+  return GetSize() + insertnum <= GetMaxSize();
+}
+// end: added by zhangyu at 2025/10/19 for P2:Task4
 
 // valuetype for internalNode should be page id_t
 template class BPlusTreeInternalPage<GenericKey<4>, page_id_t, GenericComparator<4>>;
@@ -127,4 +141,3 @@ template class BPlusTreeInternalPage<GenericKey<16>, page_id_t, GenericComparato
 template class BPlusTreeInternalPage<GenericKey<32>, page_id_t, GenericComparator<32>>;
 template class BPlusTreeInternalPage<GenericKey<64>, page_id_t, GenericComparator<64>>;
 }  // namespace bustub
-// end: added by zhangyu at 2025/9/28 for P2:Task1

@@ -70,6 +70,8 @@ class BPlusTreeLeafPage : public BPlusTreePage {
   auto Delete(int index) -> bool;
   void SetKeyAt(int index, const KeyType &key);
   void SetValueAt(int index, const ValueType &value);
+  auto IsSafeLeafForDelete(int deletenum) -> bool;
+  auto IsSafeLeafForInsert(int insertnum) -> bool;
   // end: added by zhangyu at 2025/10/9 for P2:Task2
 
   /**

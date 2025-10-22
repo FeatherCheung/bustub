@@ -99,6 +99,20 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Delete(int index) -> bool {
   ChangeSizeBy(-1);
   return true;
 }
+// end: added by zhangyu at 2025/9/28 for P2:Task1
+
+// begin: added by zhangyu at 2025/10/19 for P2:Task4
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::IsSafeLeafForDelete(int deletenum) -> bool {
+  auto minsize = (GetMaxSize() % 2 == 1) ? GetMinSize() + 1 : GetMinSize();
+  return GetSize() - deletenum >= minsize;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::IsSafeLeafForInsert(int insertnum) -> bool {
+  return GetSize() + insertnum >= GetMaxSize();
+}
+// end: added by zhangyu at 2025/10/19 for P2:Task4
 
 template class BPlusTreeLeafPage<GenericKey<4>, RID, GenericComparator<4>>;
 template class BPlusTreeLeafPage<GenericKey<8>, RID, GenericComparator<8>>;
@@ -106,4 +120,3 @@ template class BPlusTreeLeafPage<GenericKey<16>, RID, GenericComparator<16>>;
 template class BPlusTreeLeafPage<GenericKey<32>, RID, GenericComparator<32>>;
 template class BPlusTreeLeafPage<GenericKey<64>, RID, GenericComparator<64>>;
 }  // namespace bustub
-// end: added by zhangyu at 2025/9/28 for P2:Task1

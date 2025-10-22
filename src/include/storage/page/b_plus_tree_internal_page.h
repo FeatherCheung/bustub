@@ -71,6 +71,8 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   /* insert和delete函数，index对应的是key的数组下标 */
   auto Insert(int index, const KeyType &key, const ValueType &value) -> bool;
   auto Delete(int index) -> bool;
+  auto IsSafeInternalForDelete(int deletenum) -> bool;
+  auto IsSafeInternalForInsert(int insertnum) -> bool;
   // end added by zhangyu at 2025/10/10 for P2:Task2
 
   /**

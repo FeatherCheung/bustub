@@ -85,14 +85,6 @@ class BPlusTree {
       -> InternalPage *;
   auto MergeInternal(InternalPage *left_page, InternalPage *right_page, int current_index, int sibling_index,
                      InternalPage *parent_page, bool isright) -> InternalPage *;
-
-  using CurrentNode = struct CurrentNode {
-    union CurrentPage {
-      LeafPage *leaf_page_;
-      InternalPage *internal_page_;
-    } page_;
-    bool is_leaf_page_;
-  };
   // end added by zhangyu at 2025/9/28 for P2:Task2
   //  Returns true if this B+ tree has no keys and values.
   auto IsEmpty() const -> bool;
