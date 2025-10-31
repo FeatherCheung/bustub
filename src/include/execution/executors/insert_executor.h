@@ -15,6 +15,7 @@
 #include <memory>
 #include <utility>
 
+#include "catalog/catalog.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/insert_plan.h"
@@ -57,6 +58,10 @@ class InsertExecutor : public AbstractExecutor {
  private:
   /** The insert plan node to be executed*/
   const InsertPlanNode *plan_;
+  //added by zhangyu at 2025/10/27 for p3t1
+  std::shared_ptr<TableInfo> tableinfo_;
+  std::unique_ptr<AbstractExecutor> child_executor_;
+  bool executed_;
 };
 
 }  // namespace bustub

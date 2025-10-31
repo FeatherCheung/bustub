@@ -12,11 +12,14 @@
 
 #pragma once
 
+#include <cstddef>
 #include <vector>
 
+#include "common/config.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/seq_scan_plan.h"
+#include "storage/table/table_iterator.h"
 #include "storage/table/tuple.h"
 
 namespace bustub {
@@ -32,6 +35,7 @@ class SeqScanExecutor : public AbstractExecutor {
    * @param plan The sequential scan plan to be executed
    */
   SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNode *plan);
+  ~SeqScanExecutor() override;
 
   /** Initialize the sequential scan */
   void Init() override;
@@ -50,5 +54,8 @@ class SeqScanExecutor : public AbstractExecutor {
  private:
   /** The sequential scan plan node to be executed */
   const SeqScanPlanNode *plan_;
+  //added by zhangyu at 2025/10/27 for p3t1
+  TableIterator *iter_{nullptr};
+  AbstractExpressionRef filter_expr_{nullptr};
 };
 }  // namespace bustub
