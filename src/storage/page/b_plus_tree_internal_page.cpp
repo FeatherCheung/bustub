@@ -108,12 +108,18 @@ INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Delete(int index) -> bool {
   BUSTUB_ASSERT(0 <= index && index < GetSize(), "invalid index internal Delete()");
 
-  if (GetSize() - 1 > 1) {
-    if (1 <= index && index <= GetSize() - 2) {
+  int size = GetSize();
+  if (size >= 3) {
+    if (index >= 0 && index <= size - 2) {
       for (int i = index + 1; i < GetSize(); ++i) {
         SetKeyAt(i - 1, KeyAt(i));
         SetValueAt(i - 1, ValueAt(i));
       }
+    }
+  }
+  if (size == 2) {
+    if (index == 0) {
+      SetValueAt(0, ValueAt(1));
     }
   }
   ChangeSizeBy(-1);
