@@ -10,6 +10,7 @@
 #include "catalog/catalog.h"
 #include "concurrency/transaction.h"
 #include "execution/expressions/abstract_expression.h"
+#include "execution/expressions/column_value_expression.h"
 #include "execution/plans/abstract_plan.h"
 
 namespace bustub {
@@ -82,6 +83,9 @@ class Optimizer {
    * @brief optimize order by as index scan if there's an index on a table
    */
   auto OptimizeOrderByAsIndexScan(const AbstractPlanNodeRef &plan) -> AbstractPlanNodeRef;
+  // begin add by zhangyu for P3T1 at 2025/11/14
+  auto OptimizeGetColValue(const AbstractExpression *expr, std::vector<AbstractExpressionRef> &pred_keys)
+      -> std::vector<const ColumnValueExpression *>;
 
   /**
    * @brief optimize seq scan as index scan if there's an index on a table

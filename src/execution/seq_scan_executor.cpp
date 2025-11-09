@@ -21,20 +21,18 @@ namespace bustub {
 // begin：added by zhangyu at 2025/10/27 for p3t1
 SeqScanExecutor::SeqScanExecutor(ExecutorContext *exec_ctx, const SeqScanPlanNode *plan)
     : AbstractExecutor(exec_ctx), plan_(plan) {
-        if(plan_->filter_predicate_ != nullptr){
-            filter_expr_ = plan_->filter_predicate_;
-        }
-    }
+  if (plan_->filter_predicate_ != nullptr) {
+    filter_expr_ = plan_->filter_predicate_;
+  }
+}
 
-SeqScanExecutor::~SeqScanExecutor(){
-    if(iter_ != nullptr){
-        delete iter_;
-        iter_ = nullptr;
-    }
-};
-void SeqScanExecutor::Init() {
+SeqScanExecutor::~SeqScanExecutor() {
+  if (iter_ != nullptr) {
+    delete iter_;
     iter_ = nullptr;
- }
+  }
+};
+void SeqScanExecutor::Init() { iter_ = nullptr; }
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   auto catalog = exec_ctx_->GetCatalog();
@@ -63,5 +61,5 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
   return false;
 }
-  // end: added by zhangyu at 2025/10/27 for p3t1
+// end: added by zhangyu at 2025/10/27 for p3t1
 }  // namespace bustub

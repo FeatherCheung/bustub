@@ -62,7 +62,7 @@ class DeleteExecutor : public AbstractExecutor {
 
   /** The child executor from which RIDs for deleted tuples are pulled */
   std::unique_ptr<AbstractExecutor> child_executor_;
-  //added by zhangyu at 2025/10/27 for p3t1
+  // added by zhangyu at 2025/10/27 for p3t1
   const TableInfo *table_info_;
   bool executed_{false};
 };
