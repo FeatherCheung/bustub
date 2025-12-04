@@ -40,6 +40,9 @@ void IndexScanExecutor::Init() {
   b_plus_tree_index_ = dynamic_cast<BPlusTreeIndexForTwoIntegerColumn *>(index.get());
   table_info_ = catalog->GetTable(plan_->table_oid_).get();
   key_index_ = 0;
+  delete iter_;
+  iter_ = nullptr;
+  executed_ = false;
 }
 
 auto IndexScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {

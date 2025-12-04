@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <vector>
 
+#include "catalog/catalog.h"
 #include "common/config.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
@@ -57,5 +58,6 @@ class SeqScanExecutor : public AbstractExecutor {
   // added by zhangyu at 2025/10/27 for p3t1
   TableIterator *iter_{nullptr};
   AbstractExpressionRef filter_expr_{nullptr};
+  TableInfo *table_info_;
 };
 }  // namespace bustub

@@ -32,13 +32,18 @@ SeqScanExecutor::~SeqScanExecutor() {
     iter_ = nullptr;
   }
 };
-void SeqScanExecutor::Init() { iter_ = nullptr; }
+void SeqScanExecutor::Init() {
+  auto catalog = exec_ctx_->GetCatalog();
+  table_info_ = catalog->GetTable(plan_->GetTableOid()).get();
+  if (iter_ != nullptr) {
+    delete iter_;
+    iter_ = nullptr;
+  }
+}
 
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  auto catalog = exec_ctx_->GetCatalog();
-  auto tableinfo = catalog->GetTable(plan_->GetTableOid());
   if (iter_ == nullptr) {
-    iter_ = new TableIterator(tableinfo->table_->MakeIterator());
+    iter_ = new TableIterator(table_info_->table_->MakeIterator());
   }
   while (!iter_->IsEnd()) {
     auto [tuplemeta, tuple_res] = iter_->GetTuple();
