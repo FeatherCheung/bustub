@@ -174,7 +174,9 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
   // 先查找这个page是不是在缓冲池中
   auto it = page_table_.find(page_id);
 
+  /* 不在的话只用删除磁盘上数据就可以了 */
   if (it == page_table_.end()) {
+    disk_scheduler_->DeallocatePage(page_id);
     return true;
   }
 
