@@ -1,5 +1,6 @@
 #pragma once
 
+#include <set>
 #include <unordered_map>
 
 #include "concurrency/transaction.h"
@@ -34,7 +35,8 @@ class Watermark {
 
   timestamp_t watermark_;
 
-  std::unordered_map<timestamp_t, int> current_reads_;
+  // added by zhangyu for p4t2 at 2025/12/10
+  std::multiset<timestamp_t> current_reads_;
 };
 
 };  // namespace bustub
