@@ -11,6 +11,8 @@
 //===----------------------------------------------------------------------===//
 #include <memory>
 
+#include "concurrency/transaction_manager.h"
+#include "execution/execution_common.h"
 #include "execution/executor_factory.h"
 #include "execution/executors/seq_scan_executor.h"
 #include "execution/executors/update_executor.h"
@@ -52,13 +54,68 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     }
 
     // old tuple 标记删除
+    // new tuple 插入表中
+    // begin: p4t3 at 2026/1/22 zhangyu: generate undolog for update
     Tuple new_tup(values, &table_info_->schema_);
-    TupleMeta tup_meta = table_info_->table_->GetTupleMeta(old_rid);
-    tup_meta.is_deleted_ = true;
-    table_info_->table_->UpdateTupleMeta(tup_meta, old_rid);
 
-    // 新tuple 插入
-    auto val_rid = table_info_->table_->InsertTuple({0, false}, new_tup);
+    // 伪更新，直接continue
+    if (IsTupleContentEqual(old_tup, new_tup)) {
+      continue;
+    }
+
+    auto txn = exec_ctx_->GetTransaction();
+    auto txnmrg = exec_ctx_->GetTransactionManager();
+    auto [old_tupmeta, _, undo_link_opt] = GetTupleAndUndoLink(txnmrg, table_info_->table_.get(), old_rid);
+    /* write-write check */
+
+    if (CheckWriteConflict(&old_tupmeta, txn)) {
+      txn->SetTainted();
+      throw ExecutionException("write -write conflict in delete!");
+    }
+
+    auto new_tupmeta = old_tupmeta;
+    auto cur_undo_link = undo_link_opt.value();
+    UndoLink new_undo_link;
+
+    // 判断是否生成 UndoLog（或合并UndoLog）
+    if (cur_undo_link.IsValid()) {
+      auto undo_log_opt = txnmrg->GetUndoLogOptional(cur_undo_link);
+      if (undo_log_opt.has_value()) {
+        auto old_undo_log = undo_log_opt.value();
+        if (cur_undo_link.prev_txn_ == txn->GetTransactionTempTs()) {
+          auto new_uodo_log = GenerateUpdatedUndoLog(&table_info_->schema_, &old_tup, &new_tup, old_undo_log);
+          txn->ModifyUndoLog(cur_undo_link.prev_log_idx_, new_uodo_log);
+          new_undo_link = cur_undo_link;
+          new_undo_link.prev_txn_ = txn->GetTransactionId();
+          // 更新元组和它的undolink
+          new_tupmeta.ts_ = txn->GetTransactionTempTs();
+          new_tup.SetRid(old_tup.GetRid());
+          UpdateTupleAndUndoLink(exec_ctx_->GetTransactionManager(), old_rid, new_undo_link, table_info_->table_.get(),
+                                 txn, new_tupmeta, new_tup);
+          break;
+        }
+      }
+    }
+
+    if (old_tupmeta.ts_ != txn->GetTransactionTempTs()) {
+      auto undo_log = GenerateNewUndoLog(&table_info_->schema_, &old_tup, &new_tup, old_tupmeta.ts_, cur_undo_link);
+      new_undo_link = txn->AppendUndoLog(undo_log);
+      // 更新元组和它的undolink
+      new_tupmeta.ts_ = txn->GetTransactionTempTs();
+      new_tup.SetRid(old_tup.GetRid());
+      UpdateTupleAndUndoLink(exec_ctx_->GetTransactionManager(), old_rid, new_undo_link, table_info_->table_.get(), txn,
+                             new_tupmeta, new_tup);
+
+    } else {
+      // 直接插入即可
+      new_tupmeta.ts_ = txn->GetTransactionTempTs();
+      new_tup.SetRid(old_tup.GetRid());
+      table_info_->table_->UpdateTupleInPlace(new_tupmeta, new_tup, old_rid);
+    }
+
+    // 记录写集（commit 用）
+    txn->AppendWriteSet(table_info_->oid_, old_rid);
+    // end: p4t3 at 2026/1/22 zhangyu: generate undolog for update
 
     // 删除旧的索引，插入新的索引
     for (const auto &index_info : indexes_info) {
@@ -67,8 +124,7 @@ auto UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
       b_plus_tree_index->DeleteEntry(
           old_tup.KeyFromTuple(table_info_->schema_, *index->GetKeySchema(), index->GetKeyAttrs()), old_rid, nullptr);
       b_plus_tree_index->InsertEntry(
-          new_tup.KeyFromTuple(table_info_->schema_, *index->GetKeySchema(), index->GetKeyAttrs()), val_rid.value(),
-          nullptr);
+          new_tup.KeyFromTuple(table_info_->schema_, *index->GetKeySchema(), index->GetKeyAttrs()), old_rid, nullptr);
     }
 
     ++update_num;

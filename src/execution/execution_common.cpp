@@ -11,10 +11,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "execution/execution_common.h"
+#include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <vector>
 
 #include "catalog/catalog.h"
+#include "catalog/column.h"
+#include "catalog/schema.h"
 #include "common/config.h"
 #include "common/macros.h"
 #include "concurrency/transaction.h"
@@ -92,6 +96,12 @@ auto ReconstructTuple(const Schema *schema, const Tuple &base_tuple, const Tuple
   for (const auto &log : undo_logs) {
     std::vector<Column> columns;
     std::vector<int> col_idxs;
+    // 更新元信息（保持最新的 meta）
+    meta.is_deleted_ = log.is_deleted_;
+    meta.ts_ = log.ts_;
+    if (log.modified_fields_.empty()) {
+      continue;
+    }
     for (uint32_t i = 0; i < schema->GetColumnCount(); i++) {
       if (log.modified_fields_[i]) {
         // 该列被修改过 → 覆盖
@@ -106,9 +116,6 @@ auto ReconstructTuple(const Schema *schema, const Tuple &base_tuple, const Tuple
       auto value = log.tuple_.GetValue(&partial_schema, modified_col++);
       values[col_idx] = value;
     }
-    // 更新元信息（保持最新的 meta）
-    meta.is_deleted_ = log.is_deleted_;
-    meta.ts_ = log.ts_;
   }
 
   // 如果最终版本是删除版本，返回 nullopt
@@ -204,7 +211,38 @@ auto CollectUndoLogs(RID rid, const TupleMeta &base_meta, const Tuple &base_tupl
  */
 auto GenerateNewUndoLog(const Schema *schema, const Tuple *base_tuple, const Tuple *target_tuple, timestamp_t ts,
                         UndoLink prev_version) -> UndoLog {
-  UNIMPLEMENTED("not implemented");
+  /*
+   * P4T3 at 2026/1/11 zhangyu
+   * 首次生成undolog
+   */
+  // 初始元组为空，证明这是插入
+  if (base_tuple == nullptr) {
+    return UndoLog{true, {}, {}, ts, prev_version};
+  }
+  std::vector<bool> modified_fields;
+
+  // 目标元组为空，证明是删除
+  if (target_tuple == nullptr) {
+    modified_fields.resize(schema->GetColumnCount(), true);
+    return {false, modified_fields, *base_tuple, ts, prev_version};
+  }
+  std::vector<Value> values;
+  std::vector<Column> columns;
+
+  for (uint32_t column_idx = 0; column_idx < schema->GetColumnCount(); ++column_idx) {
+    auto tar_val = target_tuple->GetValue(schema, column_idx);
+    auto base_val = base_tuple->GetValue(schema, column_idx);
+    if (!tar_val.CompareExactlyEquals(base_val)) {
+      modified_fields.push_back(true);
+      values.push_back(base_val);
+      const auto &column = schema->GetColumn(column_idx);
+      columns.push_back(column);
+    } else {
+      modified_fields.push_back(false);
+    }
+  }
+  Schema partial_schema(columns);
+  return {false, modified_fields, {values, &partial_schema}, ts, prev_version};
 }
 
 /**
@@ -219,7 +257,73 @@ auto GenerateNewUndoLog(const Schema *schema, const Tuple *base_tuple, const Tup
  */
 auto GenerateUpdatedUndoLog(const Schema *schema, const Tuple *base_tuple, const Tuple *target_tuple,
                             const UndoLog &log) -> UndoLog {
-  UNIMPLEMENTED("not implemented");
+  /*
+   * P4T3 at 2026/1/11 zhangyu
+   * 针对同一条tuple的多次修改，合并为一个undolog
+   */
+
+  // 如果undolog为空，表明之前的是插入
+  if (log.is_deleted_) {
+    return GenerateNewUndoLog(schema, {}, target_tuple, log.ts_, log.prev_version_);
+  }
+
+  // 1、先根据旧的日志，重构出原来的tuple
+  std::vector<Value> old_values;
+  old_values.reserve(schema->GetColumnCount());
+  for (uint32_t i = 0; i < schema->GetColumnCount(); i++) {
+    old_values.emplace_back(base_tuple->GetValue(schema, i));
+  }
+
+  std::vector<Column> old_columns;
+  std::vector<int> col_idxs;
+
+  for (uint32_t i = 0; i < schema->GetColumnCount(); i++) {
+    if (log.modified_fields_[i]) {
+      // 该列被修改过 → 覆盖
+      auto column = schema->GetColumn(i);
+      old_columns.emplace_back(column);
+      col_idxs.emplace_back(i);
+    }
+  }
+  Schema old_partial_schema(old_columns);
+  int modified_col = 0;
+  for (auto col_idx : col_idxs) {
+    auto value = log.tuple_.GetValue(&old_partial_schema, modified_col++);
+    old_values[col_idx] = value;
+  }
+  Tuple tup = Tuple{old_values, schema};
+
+  std::vector<Value> new_values;
+  std::vector<Column> new_columns;
+  std::vector<bool> modified_fields;
+  // 目标为nullptr，表示为删除
+  if (target_tuple == nullptr) {
+    modified_fields.resize(schema->GetColumnCount(), true);
+    return {false, modified_fields, tup, log.ts_, log.prev_version_};
+  }
+
+  // 2、由base_tuple 和 target_tuple 构造新的log
+  for (uint32_t column_idx = 0; column_idx < schema->GetColumnCount(); ++column_idx) {
+    auto tar_val = target_tuple->GetValue(schema, column_idx);
+    auto base_val = base_tuple->GetValue(schema, column_idx);
+    // 两者不等，那么将这列存入构成undolog的values中
+    if (log.modified_fields_[column_idx]) {
+      // 两者相等，那么看原来的undolog是否有被修改
+      modified_fields.push_back(true);
+      new_values.push_back(tup.GetValue(schema, column_idx));
+      const auto &column = schema->GetColumn(column_idx);
+      new_columns.push_back(column);
+    } else if (!tar_val.CompareExactlyEquals(base_val)) {
+      modified_fields.push_back(true);
+      new_values.push_back(base_val);
+      const auto &column = schema->GetColumn(column_idx);
+      new_columns.push_back(column);
+    } else {
+      modified_fields.push_back(false);
+    }
+  }
+  Schema new_patrial_schema(new_columns);
+  return {log.is_deleted_, modified_fields, {new_values, &new_patrial_schema}, log.ts_, log.prev_version_};
 }
 
 void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const TableInfo *table_info,
@@ -277,6 +381,29 @@ void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const Table
   // RID=0/3 ts=txn6 <del marker> tuple=(<NULL>, <NULL>, <NULL>)
   //   txn6@0 (6, <NULL>, <NULL>) ts=2
   //   txn3@1 (7, _, _) ts=1
+}
+
+// p4t3 at 2026/1/22 zhangyu: check write-write conflict
+/*
+ * 两种情况的写-写冲突，
+ * 1）元组被未提交的事务update/delete，其他事务如果修改或者删除这个元组，此时冲突
+ * 2）事务B开始，事务a删除元组t，并commit，然后事务B再删除/修改这个元组并commit
+ */
+auto CheckWriteConflict(const TupleMeta *tupmeta, Transaction *txn) -> bool {
+  auto tup_ts = tupmeta->ts_;
+  // auto txn_commit_ts = txn->GetCommitTs();
+  auto txn_temp_ts = txn->GetTransactionTempTs();
+  auto txn_read_ts = txn->GetReadTs();
+
+  // case 1: 被其他未提交事务修改过
+  if (tup_ts >= TXN_START_ID && tup_ts != txn_temp_ts) {
+    return true;  // 冲突)
+  }
+  // case 2: 被未来事务提交过
+  if (tup_ts < TXN_START_ID && tup_ts > txn_read_ts) {
+    return true;  // 冲突)
+  }
+  return false;
 }
 
 }  // namespace bustub

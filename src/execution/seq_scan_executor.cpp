@@ -53,30 +53,36 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     ++(*iter_);  // 提前自增迭代器，避免多处写
 
     /* P4T2 实现元组的重构 */
-    auto undo_logs_opt = CollectUndoLogs(tuple_res.GetRid(), tuplemeta, tuple_res,
+    auto base_rid = tuple_res.GetRid();
+    auto undo_logs_opt = CollectUndoLogs(base_rid, tuplemeta, tuple_res,
                                          exec_ctx_->GetTransactionManager()->GetUndoLink(tuple_res.GetRid()),
                                          exec_ctx_->GetTransaction(), exec_ctx_->GetTransactionManager());
 
     /*
-     * 如果undo_logs_opt无值表示这个元组不可见了
-     * 如果undo_logs_opt有值，且undolog不为空，重构日志，如果undolog为空，表示不需要回退了
+     * 如果undo_logs_opt无值表示这个元组不可见了，直接continue
+     * 如果undo_logs_opt有值
+     * 1. undolog不为空，重构日志
+     *   1) 重构后有tuple，使用重构后的tuple
+     *   2) 重构后无tuple，证明这个元组被删除了，continue
+     * 2. undolog为空，直接使用当前元组即可
      */
-    if (undo_logs_opt.has_value()) {
-      auto undo_logs = undo_logs_opt.value();
-      if (!undo_logs.empty()) {
-        auto tuple_opt = ReconstructTuple(&GetOutputSchema(), tuple_res, tuplemeta, undo_logs_opt.value());
-        /* 如果没有返回tuple，则表明这个元组被删除了 */
-        if (!tuple_opt.has_value()) {
-          continue;
-        }
-        tuple_res = tuple_opt.value();
-      } else {
-        if (tuplemeta.is_deleted_) {
-          continue;
-        }
-      }
-    } else {
+    if (!undo_logs_opt.has_value()) {
       continue;
+    }
+    auto undo_logs = undo_logs_opt.value();
+
+    if (!undo_logs.empty()) {
+      auto tuple_opt = ReconstructTuple(&GetOutputSchema(), tuple_res, tuplemeta, undo_logs_opt.value());
+      /* 如果没有返回tuple，则表明这个元组被删除了 */
+      if (!tuple_opt.has_value()) {
+        continue;
+      }
+      tuple_res = tuple_opt.value();
+      tuple_res.SetRid(base_rid);
+    } else {
+      if (tuplemeta.is_deleted_) {
+        continue;
+      }
     }
 
     if (filter_expr_ != nullptr) {

@@ -14,6 +14,7 @@
 #include <string>
 
 #include "common/config.h"
+#include "concurrency/transaction_manager.h"
 #include "execution/executors/insert_executor.h"
 #include "storage/table/tuple.h"
 
@@ -34,6 +35,8 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     return false;
   }
   auto catalog = exec_ctx_->GetCatalog();
+  auto txn = exec_ctx_->GetTransaction();
+  auto txn_mgr = exec_ctx_->GetTransactionManager();
   auto table_info = catalog->GetTable(plan_->GetTableOid());
   auto indexes_info = catalog->GetTableIndexes(table_info->name_);
   Tuple tup_res;
@@ -41,10 +44,17 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   int insert_num = 0;
   while (child_executor_->Next(&tup_res, &rid_res)) {
     // insert index
-    auto value_opt = table_info->table_->InsertTuple(TupleMeta{0, false}, tup_res);
+    // p4t3 at 2026/1/22 zhangyu: generate undolink for insertion
+    TupleMeta tupmeta{};
+    tupmeta.is_deleted_ = false;
+    tupmeta.ts_ = txn->GetTransactionTempTs();
+    auto value_opt = table_info->table_->InsertTuple(tupmeta, tup_res);
     if (value_opt.has_value()) {
       ++insert_num;
       rid_res = value_opt.value();
+      txn->AppendWriteSet(table_info->oid_, rid_res);
+      UndoLink link;
+      txn_mgr->UpdateUndoLink(rid_res, link, nullptr);
     }
     for (const auto &index_info : indexes_info) {
       auto index = index_info->index_.get();
