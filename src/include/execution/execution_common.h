@@ -67,7 +67,14 @@ auto GenerateUpdatedUndoLog(const Schema *schema, const Tuple *base_tuple, const
 void TxnMgrDbg(const std::string &info, TransactionManager *txn_mgr, const TableInfo *table_info,
                TableHeap *table_heap);
 
+/* P4t3 at 2026/1/11 for check write-write conflict */
+auto CheckWriteConflict(const TupleMeta *tupmeta, Transaction *txn) -> bool;
 // TODO(P4): Add new functions as needed... You are likely need to define some more functions.
+
+// add by zhangyu at 2026/1/27 for P4T2 for generate undolink
+auto GenerateUndoLink(TransactionManager *txn_mgr, Transaction *txn, UndoLink &cur_undo_link, const Tuple *old_tup,
+                      const Tuple *new_tup, const TupleMeta &old_tupmeta, const TupleMeta &new_tupmeta,
+                      const Schema *schema) -> std::optional<UndoLink>;
 //
 // To give you a sense of what can be shared across executors / transaction manager, here are the
 // list of helper function names that we defined in the reference solution. You should come up with

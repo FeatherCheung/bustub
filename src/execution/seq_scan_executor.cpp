@@ -11,7 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "execution/executors/seq_scan_executor.h"
+#include <optional>
 #include "common/config.h"
+#include "concurrency/transaction_manager.h"
+#include "execution/execution_common.h"
 #include "storage/page/table_page.h"
 #include "storage/table/table_iterator.h"
 #include "storage/table/tuple.h"
@@ -41,7 +44,10 @@ void SeqScanExecutor::Init() {
   }
 }
 
+// begin modified by zhangyu at 2026/3/17 for P4T4
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
+  auto txn_mgr = exec_ctx_->GetTransactionManager();
+  auto txn = exec_ctx_->GetTransaction();
   if (iter_ == nullptr) {
     iter_ = new TableIterator(table_info_->table_->MakeIterator());
   }
@@ -49,8 +55,35 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     auto [tuplemeta, tuple_res] = iter_->GetTuple();
     ++(*iter_);  // 提前自增迭代器，避免多处写
 
-    if (tuplemeta.is_deleted_) {
+    /* P4T2 实现元组的重构 */
+    auto base_rid = tuple_res.GetRid();
+    auto undo_logs_opt = CollectUndoLogs(base_rid, tuplemeta, tuple_res, txn_mgr->GetUndoLink(base_rid), txn, txn_mgr);
+    // end modified by zhangyu at 2026/3/17 for P4T4
+    /*
+     * 如果undo_logs_opt无值表示这个元组不可见了，直接continue
+     * 如果undo_logs_opt有值
+     * 1. undolog不为空，重构日志
+     *   1) 重构后有tuple，使用重构后的tuple
+     *   2) 重构后无tuple，证明这个元组被删除了，continue
+     * 2. undolog为空，直接使用当前元组即可
+     */
+    if (!undo_logs_opt.has_value()) {
       continue;
+    }
+    auto undo_logs = undo_logs_opt.value();
+
+    if (!undo_logs.empty()) {
+      auto tuple_opt = ReconstructTuple(&GetOutputSchema(), tuple_res, tuplemeta, undo_logs_opt.value());
+      /* 如果没有返回tuple，则表明这个元组被删除了 */
+      if (!tuple_opt.has_value()) {
+        continue;
+      }
+      tuple_res = tuple_opt.value();
+      tuple_res.SetRid(base_rid);
+    } else {
+      if (tuplemeta.is_deleted_) {
+        continue;
+      }
     }
 
     if (filter_expr_ != nullptr) {

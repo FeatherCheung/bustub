@@ -57,6 +57,12 @@ class UpdateExecutor : public AbstractExecutor {
   /** @return The output schema for the update */
   auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); }
 
+  // added by zhangyu at 2026/1/27 for P4T4
+  auto UpdateTuple(Tuple &new_tup, TupleMeta &new_tupmeta, Tuple &old_tup, TupleMeta &old_tupmeta,
+                   std::optional<UndoLink> undo_link_opt, RID &old_rid) -> bool;
+
+  auto PkCompare(const Tuple &new_tup, const Tuple &old_tup) -> bool;
+
  private:
   /** The update plan node to be executed */
   const UpdatePlanNode *plan_;

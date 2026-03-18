@@ -119,11 +119,16 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
   /* key_index 可能是应该插入的位置，也可能是该节点的位置，所以需要判断
    * 如果不在叶子节点内，那么说明这个key不存在，直接返回
    */
+  // begin added by zhangyu at 2026/1/27 for P4T4 for debugging index scan
   if (key_index >= leaf_page->GetSize() || comparator_(key, leaf_page->KeyAt(key_index)) != 0) {
+    // fmt::println("GetValue key 不存在");
+    // fmt::println("leafpage: {}", leaf_page->ToString());
     return false;
   }
   auto rid_value = leaf_page->ValueAt(key_index);
   result->push_back(static_cast<RID>(rid_value));
+  // fmt::println("check key in leaf page {}", leaf_page->ToString());
+  // end added by zhangyu at 2026/1/27 for P4T4 for debugging index scan
   return true;
 }
 
