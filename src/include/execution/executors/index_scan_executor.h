@@ -34,6 +34,7 @@ class IndexScanExecutor : public AbstractExecutor {
    * @param plan the index scan plan to be executed
    */
   IndexScanExecutor(ExecutorContext *exec_ctx, const IndexScanPlanNode *plan);
+  ~IndexScanExecutor() override;
 
   auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); }
 
@@ -44,5 +45,14 @@ class IndexScanExecutor : public AbstractExecutor {
  private:
   /** The index scan plan node to be executed. */
   const IndexScanPlanNode *plan_;
+  // added by zhangyu for P3t1 at 2025/11/3
+  BPlusTreeIndexIteratorForTwoIntegerColumn *iter_{nullptr};
+  AbstractExpressionRef filter_predicate_{nullptr};
+  std::vector<AbstractExpressionRef> pred_keys_{};
+  BPlusTreeIndexForTwoIntegerColumn *b_plus_tree_index_{nullptr};
+  int key_index_;
+  const TableInfo *table_info_;
+  bool executed_{false};
+  auto GetIndexScanTuple(Tuple *tuple, RID *rid, AbstractExpression *expr) -> bool;
 };
 }  // namespace bustub

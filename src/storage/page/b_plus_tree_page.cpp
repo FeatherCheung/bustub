@@ -10,35 +10,47 @@
 //===----------------------------------------------------------------------===//
 
 #include "storage/page/b_plus_tree_page.h"
+#include "common/macros.h"
 
 namespace bustub {
 
+// begin: added by zhangyu at 2025/9/28 for P2:Task1
 /*
  * Helper methods to get/set page type
  * Page type enum class is defined in b_plus_tree_page.h
  */
-auto BPlusTreePage::IsLeafPage() const -> bool { return false; }
-void BPlusTreePage::SetPageType(IndexPageType page_type) {}
+/* 判断节点类型 */
+auto BPlusTreePage::IsLeafPage() const -> bool { return page_type_ == IndexPageType::LEAF_PAGE; }
+/* 设置节点类型 */
+void BPlusTreePage::SetPageType(IndexPageType page_type) { page_type_ = page_type; }
 
 /*
  * Helper methods to get/set size (number of key/value pairs stored in that
  * page)
  */
-auto BPlusTreePage::GetSize() const -> int { return 0; }
-void BPlusTreePage::SetSize(int size) {}
-void BPlusTreePage::ChangeSizeBy(int amount) {}
+auto BPlusTreePage::GetSize() const -> int { return size_; }
+void BPlusTreePage::SetSize(int size) { size_ = size; }
+void BPlusTreePage::ChangeSizeBy(int amount) {
+  auto new_size = size_ + amount;
+
+  BUSTUB_ASSERT(new_size >= 0, "the current size of B plus tree can't be negative");
+  BUSTUB_ASSERT(new_size <= max_size_, "the current size of B plus tree can't bypass max_size");
+
+  size_ = new_size;
+}
 
 /*
  * Helper methods to get/set max size (capacity) of the page
  */
-auto BPlusTreePage::GetMaxSize() const -> int { return 0; }
-void BPlusTreePage::SetMaxSize(int size) {}
+auto BPlusTreePage::GetMaxSize() const -> int { return max_size_; }
+void BPlusTreePage::SetMaxSize(int size) { max_size_ = size; }
 
 /*
  * Helper method to get min page size
  * Generally, min page size == max page size / 2
  * But whether you will take ceil() or floor() depends on your implementation
  */
-auto BPlusTreePage::GetMinSize() const -> int { return 0; }
+auto BPlusTreePage::GetMinSize() const -> int { return max_size_ / 2; }
 
 }  // namespace bustub
+// end: added by zhangyu at 2025/9/28 for P2:Task1

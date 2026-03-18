@@ -66,12 +66,20 @@ class BPlusTreeInternalPage : public BPlusTreePage {
    * @param key The new value for key
    */
   void SetKeyAt(int index, const KeyType &key);
+  // begin added by zhangyu at 2025/10/10 for P2:Task2
+  void SetValueAt(int index, const ValueType &value);
+  /* insert和delete函数，index对应的是key的数组下标 */
+  auto Insert(int index, const KeyType &key, const ValueType &value) -> bool;
+  auto Delete(int index) -> bool;
+  auto IsSafeInternalForDelete(int deletenum) -> bool;
+  auto IsSafeInternalForInsert(int insertnum) -> bool;
+  // end added by zhangyu at 2025/10/10 for P2:Task2
 
   /**
    * @param value The value to search for
    * @return The index that corresponds to the specified value
    */
-  auto ValueIndex(const ValueType &value) const -> int;
+  //  auto ValueIndex(const ValueType &value) const -> int;
 
   /**
    * @param index The index to search for

@@ -20,13 +20,40 @@
 
 namespace bustub {
 
+// begin: mod by zhangyu for p3t4 at 2025/12/6
 TupleComparator::TupleComparator(std::vector<OrderBy> order_bys) : order_bys_(std::move(order_bys)) {}
 
-auto TupleComparator::operator()(const SortEntry &entry_a, const SortEntry &entry_b) const -> bool { return false; }
+/*
+ * true a在b之前，false a == b 或者 b在a 之前
+ */
+auto TupleComparator::operator()(const SortEntry &entry_a, const SortEntry &entry_b) const -> bool {
+  for (size_t i = 0; i < order_bys_.size(); i++) {
+    const auto &v1 = entry_a.first[i];
+    const auto &v2 = entry_b.first[i];
 
-auto GenerateSortKey(const Tuple &tuple, const std::vector<OrderBy> &order_bys, const Schema &schema) -> SortKey {
-  return {};
+    if (v1.CompareEquals(v2) == CmpBool::CmpTrue) {
+      continue;  // 继续比较下一列
+    }
+
+    auto comp = v1.CompareLessThan(v2);
+
+    if (order_bys_[i].first == OrderByType::DESC) {
+      return comp == CmpBool::CmpFalse;  // 反转
+    }
+
+    return comp == CmpBool::CmpTrue;  // ASC
+  }
+  return false;  // 完全相等
 }
+auto GenerateSortKey(const Tuple &tuple, const std::vector<OrderBy> &order_bys, const Schema &schema) -> SortKey {
+  SortKey key;
+  for (const auto &order : order_bys) {
+    auto val = order.second->Evaluate(&tuple, schema);
+    key.push_back(val);
+  }
+  return key;
+}
+// end: mod by zhangyu for p3t4 at 2025/12/6
 
 /**
  * Above are all you need for P3.

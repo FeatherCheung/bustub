@@ -283,6 +283,7 @@ set(P1_FILES
         "src/storage/disk/disk_scheduler.cpp"
         "src/storage/page/page_guard.cpp"
         "src/include/storage/page/page_guard.h"
+        "GRADESCOPE.md"
 )
 add_custom_target(check-clang-tidy-p1
         ${BUSTUB_BUILD_SUPPORT_DIR}/run_clang_tidy.py # run LLVM's clang-tidy script
@@ -308,6 +309,7 @@ set(P2_FILES
         "src/include/storage/index/b_plus_tree.h"
         "src/include/storage/index/b_plus_tree_debug.h"
         "src/storage/index/b_plus_tree.cpp"
+        "GRADESCOPE.md"
         ${P1_FILES}
 )
 add_custom_target(check-clang-tidy-p2

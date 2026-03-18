@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include "common/logger.h"
 #include "common/util/hash_util.h"
 #include "container/hash/hash_function.h"
 #include "execution/executor_context.h"
@@ -24,6 +25,7 @@
 #include "execution/expressions/abstract_expression.h"
 #include "execution/plans/aggregation_plan.h"
 #include "storage/table/tuple.h"
+#include "type/value.h"
 #include "type/value_factory.h"
 
 namespace bustub {
@@ -70,18 +72,47 @@ class SimpleAggregationHashTable {
    * @param[out] result The output aggregate value
    * @param input The input value
    */
+  // begin: mod by zhangyu for p3t2 at 2025/11/10
   void CombineAggregateValues(AggregateValue *result, const AggregateValue &input) {
+    static const Value one(TypeId::INTEGER, 1);
+
     for (uint32_t i = 0; i < agg_exprs_.size(); i++) {
-      switch (agg_types_[i]) {
+      Value &res_val = result->aggregates_[i];
+      const Value &input_val = input.aggregates_[i];
+      const auto agg_type = agg_types_[i];
+
+      // 统一处理 NULL 输入的情况（CountStar 除外）
+      if (input_val.IsNull() && agg_type != AggregationType::CountStarAggregate) {
+        continue;
+      }
+
+      switch (agg_type) {
         case AggregationType::CountStarAggregate:
         case AggregationType::CountAggregate:
+          res_val = res_val.IsNull() ? one : res_val.Add(one);
+          break;
+
         case AggregationType::SumAggregate:
+          res_val = res_val.IsNull() ? input_val : res_val.Add(input_val);
+          break;
+
         case AggregationType::MinAggregate:
+          res_val = res_val.IsNull() ? input_val : res_val.Min(input_val);
+          break;
+
         case AggregationType::MaxAggregate:
+          res_val = res_val.IsNull() ? input_val : res_val.Max(input_val);
+          break;
+
+        default:
+          LOG_DEBUG("INVALID AggregationType in CombineAggregateValues");
           break;
       }
     }
   }
+
+  void Initial(const AggregateKey &agg_key) { ht_.insert({agg_key, GenerateInitialAggregateValue()}); }
+  // end: mod by zhangyu for p3t2 at 2025/11/10
 
   /**
    * Inserts a value into the hash table and then combines it with the current aggregation.
@@ -159,6 +190,8 @@ class AggregationExecutor : public AbstractExecutor {
   AggregationExecutor(ExecutorContext *exec_ctx, const AggregationPlanNode *plan,
                       std::unique_ptr<AbstractExecutor> &&child_executor);
 
+  // add by zhangyu for p3t2 at 2025/11
+  ~AggregationExecutor() override;
   /** Initialize the aggregation */
   void Init() override;
 
@@ -202,10 +235,13 @@ class AggregationExecutor : public AbstractExecutor {
   /** The child executor that produces tuples over which the aggregation is computed */
   std::unique_ptr<AbstractExecutor> child_executor_;
 
+  // mod by zhangyu for p3t2 at 2025/11/12
   /** Simple aggregation hash table */
-  // TODO(Student): Uncomment SimpleAggregationHashTable aht_;
+  SimpleAggregationHashTable *aht_{nullptr};
 
   /** Simple aggregation hash table iterator */
-  // TODO(Student): Uncomment SimpleAggregationHashTable::Iterator aht_iterator_;
+  SimpleAggregationHashTable::Iterator *aht_iterator_{nullptr};
+
+  int tuple_size_{0};
 };
 }  // namespace bustub
