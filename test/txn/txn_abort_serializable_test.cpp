@@ -7,7 +7,7 @@ namespace bustub {
 
 // NOLINTBEGIN(bugprone-unchecked-optional-access)
 
-TEST(TxnBonusTest, ABLED_SerializableTest) {  // NOLINT
+TEST(TxnBonusTest, DABLED_SerializableTest) {  // NOLINT
   fmt::println(stderr, "--- SerializableTest2: Serializable ---");
   {
     auto bustub = std::make_unique<BusTubInstance>();
@@ -33,7 +33,7 @@ TEST(TxnBonusTest, ABLED_SerializableTest) {  // NOLINT
   }
 }
 
-TEST(TxnBonusTest, ABLED_ConcurrentSerializableTest) {  // NOLINT
+TEST(TxnBonusTest, DABLED_ConcurrentSerializableTest) {  // NOLINT
   fmt::println(stderr, "--- SerializableTest2: Concurrent Serializable ---");
   {
     for (int i = 0; i < 10; i++) {
