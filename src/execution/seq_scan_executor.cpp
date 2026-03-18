@@ -44,7 +44,10 @@ void SeqScanExecutor::Init() {
   }
 }
 
+// begin modified by zhangyu at 2026/3/17 for P4T4
 auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
+  auto txn_mgr = exec_ctx_->GetTransactionManager();
+  auto txn = exec_ctx_->GetTransaction();
   if (iter_ == nullptr) {
     iter_ = new TableIterator(table_info_->table_->MakeIterator());
   }
@@ -54,10 +57,8 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 
     /* P4T2 实现元组的重构 */
     auto base_rid = tuple_res.GetRid();
-    auto undo_logs_opt = CollectUndoLogs(base_rid, tuplemeta, tuple_res,
-                                         exec_ctx_->GetTransactionManager()->GetUndoLink(tuple_res.GetRid()),
-                                         exec_ctx_->GetTransaction(), exec_ctx_->GetTransactionManager());
-
+    auto undo_logs_opt = CollectUndoLogs(base_rid, tuplemeta, tuple_res, txn_mgr->GetUndoLink(base_rid), txn, txn_mgr);
+    // end modified by zhangyu at 2026/3/17 for P4T4
     /*
      * 如果undo_logs_opt无值表示这个元组不可见了，直接continue
      * 如果undo_logs_opt有值

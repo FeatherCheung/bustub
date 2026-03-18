@@ -33,6 +33,7 @@ void DeleteExecutor::Init() {
   child_executor_->Init();
 }
 
+// begin added by zhangyu at 2026/3/17 for P4T4 为mvcc调整删除操作
 auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
   if (executed_) {
     return false;
@@ -48,59 +49,45 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
         GetTupleAndUndoLink(exec_ctx_->GetTransactionManager(), table_info_->table_.get(), rid_delete);
     /* write-write check */
     auto txn = exec_ctx_->GetTransaction();
-    auto txnmrg = exec_ctx_->GetTransactionManager();
+    auto txn_mgr = exec_ctx_->GetTransactionManager();
     if (CheckWriteConflict(&tup_meta, txn)) {
       txn->SetTainted();
       throw ExecutionException("write -write conflict in delete!");
     }
 
-    // 生成 undolog
     TupleMeta new_tupmeta = {txn->GetTransactionTempTs(), true};
-    auto cur_undo_link = undo_link_opt.value();
-    UndoLink new_undo_link;
-    if (cur_undo_link.IsValid()) {
-      // 如果这个元组有undolink，并且是同一个事务删除，undolog合并即可
-      auto undo_log_opt = txnmrg->GetUndoLogOptional(cur_undo_link);
-      if (undo_log_opt.has_value()) {
-        auto old_undo_log = undo_log_opt.value();
-        if (cur_undo_link.prev_txn_ == txn->GetTransactionTempTs()) {
-          auto new_uodo_log = GenerateUpdatedUndoLog(&table_info_->schema_, &tup_delete, nullptr, old_undo_log);
-          txn->ModifyUndoLog(cur_undo_link.prev_log_idx_, new_uodo_log);
-          new_undo_link = cur_undo_link;
-          new_undo_link.prev_txn_ = txn->GetTransactionId();
-          // 更新元组和它的undolink
-          UpdateTupleAndUndoLink(exec_ctx_->GetTransactionManager(), rid_delete, new_undo_link,
-                                 table_info_->table_.get(), txn, new_tupmeta, tup_delete);
-          break;
-        }
-      }
-    }
+    auto cur_undolink = undo_link_opt.value();
+    auto new_undolink_opt = GenerateUndoLink(txn_mgr, txn, cur_undolink, &tup_delete, nullptr, tup_meta, new_tupmeta,
+                                             &table_info_->schema_);
 
-    // 这个元组没有undolink，那么要么新生成undolog，要么直接删除
-    if (tup_meta.ts_ != txn->GetTransactionTempTs()) {
-      auto undo_log = GenerateNewUndoLog(&table_info_->schema_, &tup_delete, nullptr, tup_meta.ts_, cur_undo_link);
-      new_undo_link = txn->AppendUndoLog(undo_log);
-      // 更新元组和它的undolink
-      UpdateTupleAndUndoLink(exec_ctx_->GetTransactionManager(), rid_delete, new_undo_link, table_info_->table_.get(),
-                             txn, new_tupmeta, tup_delete);
+    new_tupmeta.ts_ = txn->GetTransactionTempTs();
+    if (new_undolink_opt.has_value()) {
+      auto ret = UpdateTupleAndUndoLink(
+          exec_ctx_->GetTransactionManager(), rid_delete, new_undolink_opt.value(), table_info_->table_.get(), txn,
+          new_tupmeta, tup_delete,
+          [txn](const TupleMeta &tup_meta, const Tuple &tuple, RID rid, std::optional<UndoLink> undolink_opt) -> bool {
+            // check 函数进行write-write 判断，并验证是否可以delete
+            if (CheckWriteConflict(&tup_meta, txn)) {
+              txn->SetTainted();
+              throw ExecutionException("write -write conflict in delete!");
+            }
+            return true;
+          });
+      if (!ret) {
+        txn->SetTainted();
+        throw ExecutionException("deleted failed!");
+      }
     } else {
-      // 删除即可
       table_info_->table_->UpdateTupleInPlace(new_tupmeta, tup_delete, rid_delete);
     }
 
     // 记录写集（commit 用）
     txn->AppendWriteSet(table_info_->oid_, rid_delete);
     // end p4t3 at 2026/1/22 by zhangyu: generate undologs for deletion
-    // 删除旧的索引
-    for (const auto &index_info : indexes_info) {
-      auto index = index_info->index_.get();
-      auto b_plus_tree_index = dynamic_cast<BPlusTreeIndexForTwoIntegerColumn *>(index);
-      b_plus_tree_index->DeleteEntry(
-          tup_delete.KeyFromTuple(table_info_->schema_, *index->GetKeySchema(), index->GetKeyAttrs()), rid_delete,
-          nullptr);
-    }
+    // P4T4不再删除index entry，只标记删除tuuple
     ++delete_num;
   }
+  // end added by zhangyu at 2026/3/17 for P4T4 为mvcc调整删除操作
   // 没有需要删除的了，结束即可
   Tuple tup(*rid, reinterpret_cast<const char *>(&delete_num), sizeof(delete_num));
   *tuple = tup;

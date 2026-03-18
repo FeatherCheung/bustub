@@ -170,31 +170,29 @@ auto CollectUndoLogs(RID rid, const TupleMeta &base_meta, const Tuple &base_tupl
     return std::nullopt;
   }
 
+  // begin added by zhangyu at 2026/3/17 for P4T4
   auto cur_undolink = undo_link.value();
-  // is_flag 用来表示 整个undolog中是否存在日志是 <= read_ts
-  bool is_flag = false;
+  // bfound 用来表示是否找到整个版本链上的undolog
+  bool bfound = false;
 
-  while (cur_undolink.IsValid() && !is_flag) {
-    auto pre_txn = txn_mgr->txn_map_.find(cur_undolink.prev_txn_)->second;
-    auto cur_undolog = pre_txn->GetUndoLog(cur_undolink.prev_log_idx_);
-    // if (tup_timestamp == pre_txn->GetTransactionTempTs()) {
-    //   cur_undolink = cur_undolog.prev_version_;
-    //   undologs.push_back(cur_undolog);
-    //   continue;
-    // }
-    // 大于read_ts 那么需要回退
-    if (cur_undolog.ts_ > read_ts) {
-      undologs.push_back(cur_undolog);
-      // 第一次碰到小于等于的情况，依然放入回退集合，但是此时不需要在循环了
-    } else {
-      undologs.push_back(cur_undolog);
-      is_flag = true;
+  while (cur_undolink.IsValid() && !bfound) {
+    auto cur_undolog_opt = txn_mgr->GetUndoLogOptional(cur_undolink);
+    if (cur_undolog_opt.has_value()) {
+      auto cur_undolog = cur_undolog_opt.value();
+      // 大于read_ts 那么需要回退
+      if (cur_undolog.ts_ > read_ts) {
+        undologs.push_back(cur_undolog);
+        // 第一次碰到小于等于的情况，依然放入回退集合，但是此时不需要在循环了
+      } else {
+        undologs.push_back(cur_undolog);
+        bfound = true;
+      }
+
+      cur_undolink = cur_undolog.prev_version_;
     }
-
-    cur_undolink = cur_undolog.prev_version_;
   }
 
-  return !undologs.empty() && is_flag ? std::make_optional(undologs) : std::nullopt;
+  return !undologs.empty() && bfound ? std::make_optional(undologs) : std::nullopt;
 }
 // end: mod by zhangyu for p4t2 at 2025/12/24
 
@@ -216,7 +214,7 @@ auto GenerateNewUndoLog(const Schema *schema, const Tuple *base_tuple, const Tup
    * 首次生成undolog
    */
   // 初始元组为空，证明这是插入
-  if (base_tuple == nullptr) {
+  if (base_tuple == nullptr || base_tuple->GetLength() == 0) {
     return UndoLog{true, {}, {}, ts, prev_version};
   }
   std::vector<bool> modified_fields;
@@ -262,9 +260,16 @@ auto GenerateUpdatedUndoLog(const Schema *schema, const Tuple *base_tuple, const
    * 针对同一条tuple的多次修改，合并为一个undolog
    */
 
-  // 如果undolog为空，表明之前的是插入
+  // 1. 如果undolog为空，表明之前的是插入
   if (log.is_deleted_) {
     return GenerateNewUndoLog(schema, {}, target_tuple, log.ts_, log.prev_version_);
+  }
+
+  // 2.insert情况
+  if (base_tuple == nullptr && target_tuple != nullptr) {
+    // 恢复到原始版本的tuple，然后generate一个undo_log
+    // 原始版本的tuple就是log里面的tuple（所有列都发生了改变）
+    return GenerateNewUndoLog(schema, &log.tuple_, target_tuple, log.ts_, log.prev_version_);
   }
 
   // 1、先根据旧的日志，重构出原来的tuple
@@ -405,5 +410,34 @@ auto CheckWriteConflict(const TupleMeta *tupmeta, Transaction *txn) -> bool {
   }
   return false;
 }
+
+auto GenerateUndoLink(TransactionManager *txn_mgr, Transaction *txn, UndoLink &cur_undo_link, const Tuple *old_tup,
+                      const Tuple *new_tup, const TupleMeta &old_tupmeta, const TupleMeta &new_tupmeta,
+                      const Schema *schema) -> std::optional<UndoLink> {
+  UndoLink new_undo_link;
+  // 未提交的事务的自我修改
+  if (old_tupmeta.ts_ == txn->GetTransactionTempTs()) {
+    if (cur_undo_link.IsValid()) {
+      auto undo_log_opt = txn_mgr->GetUndoLogOptional(cur_undo_link);
+      if (undo_log_opt.has_value()) {
+        auto old_undo_log = undo_log_opt.value();
+        auto new_uodo_log =
+            GenerateUpdatedUndoLog(schema, old_tupmeta.is_deleted_ ? nullptr : old_tup, new_tup, old_undo_log);
+        txn->ModifyUndoLog(cur_undo_link.prev_log_idx_, new_uodo_log);
+        new_undo_link = cur_undo_link;
+        new_undo_link.prev_txn_ = txn->GetTransactionId();
+        return new_undo_link;
+      }
+    }
+    return std::nullopt;
+  }
+
+  // 其他情况都要为当前事务txn生成新的undolog
+  auto undo_log =
+      GenerateNewUndoLog(schema, old_tupmeta.is_deleted_ ? nullptr : old_tup, new_tup, old_tupmeta.ts_, cur_undo_link);
+  new_undo_link = txn->AppendUndoLog(undo_log);
+  return new_undo_link;
+}
+// end added by zhangyu at 2026/3/17 for P4T4
 
 }  // namespace bustub
