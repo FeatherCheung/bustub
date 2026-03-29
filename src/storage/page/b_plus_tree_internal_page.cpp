@@ -13,6 +13,7 @@
 #include <sstream>
 
 #include "common/exception.h"
+#include "common/logger.h"
 #include "common/macros.h"
 #include "storage/page/b_plus_tree_internal_page.h"
 #include "storage/page/b_plus_tree_page.h"
@@ -48,6 +49,7 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const -> KeyType {
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
+  // LOG_DEBUG("LOG_DEBUG, index: %u, maxsize: %u", index, GetMaxSize());
   BUSTUB_ASSERT(index < GetMaxSize(), "invalid index in Internal SetKeyAt()");
   key_array_[index] = key;
 }
@@ -101,27 +103,19 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Insert(int index, const KeyType &key, const
   return true;
 }
 
-/* Delete
- * index在[2, size - 2] 之间，正常删除; index为1和 size -1 时需要做特殊处理
+/*
+ * internal node delete
+ * 这个删除函数只对internal node的key和value进行删除，index为1-size-1之间正常删除
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Delete(int index) -> bool {
-  BUSTUB_ASSERT(0 <= index && index < GetSize(), "invalid index internal Delete()");
+  BUSTUB_ASSERT(1 <= index && index < GetSize(), "invalid index internal Delete()");
 
-  int size = GetSize();
-  if (size >= 3) {
-    if (index >= 0 && index <= size - 2) {
-      for (int i = index + 1; i < GetSize(); ++i) {
-        SetKeyAt(i - 1, KeyAt(i));
-        SetValueAt(i - 1, ValueAt(i));
-      }
-    }
+  for (int i = index + 1; i < GetSize(); ++i) {
+    SetKeyAt(i - 1, KeyAt(i));
+    SetValueAt(i - 1, ValueAt(i));
   }
-  if (size == 2) {
-    if (index == 0) {
-      SetValueAt(0, ValueAt(1));
-    }
-  }
+
   ChangeSizeBy(-1);
   return true;
 }
@@ -130,8 +124,7 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::Delete(int index) -> bool {
 // begin: added by zhangyu at 2025/10/19 for P2:Task4
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::IsSafeInternalForDelete(int deletenum) -> bool {
-  auto minsize = GetMinSize() + 1;
-  return GetSize() - deletenum >= minsize;
+  return GetSize() - deletenum >= GetMinSize();
 }
 
 INDEX_TEMPLATE_ARGUMENTS

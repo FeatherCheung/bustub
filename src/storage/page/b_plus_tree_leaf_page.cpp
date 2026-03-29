@@ -104,13 +104,12 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::Delete(int index) -> bool {
 // begin: added by zhangyu at 2025/10/19 for P2:Task4
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::IsSafeLeafForDelete(int deletenum) -> bool {
-  auto minsize = (GetMaxSize() % 2 == 1) ? GetMinSize() + 1 : GetMinSize();
-  return GetSize() - deletenum >= minsize;
+  return GetSize() - deletenum >= GetMinSize();
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::IsSafeLeafForInsert(int insertnum) -> bool {
-  return GetSize() + insertnum >= GetMaxSize();
+  return GetSize() + insertnum <= GetMaxSize();
 }
 // end: added by zhangyu at 2025/10/19 for P2:Task4
 

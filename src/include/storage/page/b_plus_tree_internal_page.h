@@ -41,6 +41,17 @@ namespace bustub {
  * | PAGE_ID(1) | PAGE_ID(2) | ... | PAGE_ID(n) |
  *  ---------------------------------------------
  */
+/*
+ * internal node 的 size 不是“有效 key 的个数”，而是“child pointer 的个数”。
+ * 当只有value[0] 时（即size == 1）
+ * 如果它是根节点，那么树高减小，value[0]指向的新节点应该被提升为新的root
+ * 如果它不是根节点，此时它不安全了，需要合并或者重分配
+ *
+ * 判断内部节点是否underflow
+ * min_size = ceil(max_size / 2)
+ * 删除时，size - 1 >= min_size 才安全，否则不安全，触发合并/重分配
+ * 插入时，size + 1 <= max_size 才安全，否则不安全，触发分裂
+ */
 INDEX_TEMPLATE_ARGUMENTS
 class BPlusTreeInternalPage : public BPlusTreePage {
  public:
